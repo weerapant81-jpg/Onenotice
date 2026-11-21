@@ -34,7 +34,8 @@ public class MainActivity extends Activity {
     private static MainActivity visible;
     private static final int INK=0xff202b42, MUTED=0xff6f7a90, BLUE=0xff3031c5, BG=0xfff8f9fd;
     private static final String[] PACKAGES={"jp.naver.line.android","com.facebook.orca","com.whatsapp","com.whatsapp.w4b"};
-    private final List<StatusBarNotification> notifications=new ArrayList<>();
+    private final List<Item> notifications=new ArrayList<>();private boolean demo;
+    static class Item{final String pkg,title,body;final long time;final PendingIntent intent;Item(String p,String t,String b,long tm,PendingIntent i){pkg=p;title=t;body=b;time=tm;intent=i;}}
     private LinearLayout root,content,chips;
     private EditText search;
     private String filter="ทั้งหมด",page="รวมข้อความ";
@@ -45,15 +46,29 @@ public class MainActivity extends Activity {
     @Override protected void onPause(){visible=null;super.onPause();}
 
     private void reload(){
-        notifications.clear();MessageListener service=MessageListener.instance;
+        notifications.clear();
+        demo=(getApplicationInfo().flags&android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0&&getIntent().getBooleanExtra("demo",false);
+        if(demo){loadDemo();render();return;}
+        MessageListener service=MessageListener.instance;
         if(service!=null&&hasAccess())try{
-            for(StatusBarNotification item:service.getActiveNotifications())if(Arrays.asList(PACKAGES).contains(item.getPackageName())&&!TextUtils.isEmpty(item.getNotification().extras.getCharSequence(Notification.EXTRA_TITLE)))notifications.add(item);
+            java.util.Set<String> seen=new java.util.HashSet<>();
+            StatusBarNotification[] active=service.getActiveNotifications();Arrays.sort(active,Comparator.comparingLong(StatusBarNotification::getPostTime).reversed());
+            for(StatusBarNotification item:active){
+                if(!Arrays.asList(PACKAGES).contains(item.getPackageName()))continue;Notification n=item.getNotification();
+                CharSequence title=n.extras.getCharSequence(Notification.EXTRA_TITLE);if(TextUtils.isEmpty(title)||(n.flags&Notification.FLAG_GROUP_SUMMARY)!=0)continue;
+                String body=String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TEXT,""));
+                if(seen.add(item.getPackageName()+"|"+title+"|"+body))notifications.add(new Item(item.getPackageName(),title.toString(),body,item.getPostTime(),n.contentIntent));
+            }
         }catch(RuntimeException e){Toast.makeText(this,"อ่านการแจ้งเตือนไม่สำเร็จ",Toast.LENGTH_SHORT).show();}
-        notifications.sort(Comparator.comparingLong(StatusBarNotification::getPostTime).reversed());
-        java.util.Set<String> seen=new java.util.HashSet<>();
-        notifications.removeIf(item->{Notification n=item.getNotification();if((n.flags&Notification.FLAG_GROUP_SUMMARY)!=0)return true;
-            return !seen.add(item.getPackageName()+"|"+n.extras.getCharSequence(Notification.EXTRA_TITLE,"")+"|"+n.extras.getCharSequence(Notification.EXTRA_TEXT,""));});
         render();
+    }
+    // Debug builds only: sample data for store screenshots (adb shell am start -n com.allin1.oneinbox/.MainActivity --ez demo true)
+    private void loadDemo(){
+        long now=System.currentTimeMillis(),m=60000;
+        String[][] d={{PACKAGES[0],"ทีมการตลาด","ประชุมสรุปแคมเปญย้ายเป็น 14:00 นะครับ"},{PACKAGES[1],"มินตรา","ถึงร้านแล้ว นั่งโต๊ะริมหน้าต่างนะ"},{PACKAGES[2],"คุณแม่","อย่าลืมแวะซื้อผลไม้ตอนกลับบ้านด้วยนะลูก"},
+            {PACKAGES[0],"ร้านกาแฟหน้าออฟฟิศ","รับคูปองลด 20% สำหรับแก้วถัดไป"},{PACKAGES[3],"ร้านดอกไม้บ้านสวน","ออเดอร์ช่อดอกไม้ของคุณพร้อมจัดส่งแล้วค่ะ"},{PACKAGES[1],"ก๊วนตีแบด","คืนนี้สนามเดิม ทุ่มตรง ใครไปบ้าง"},{PACKAGES[0],"พี่ต้น","ส่งไฟล์สไลด์ให้แล้ว ลองเปิดดูนะ"}};
+        int[] ago={2,5,9,16,24,38,55};
+        for(int i=0;i<d.length;i++)notifications.add(new Item(d[i][0],d[i][1],d[i][2],now-ago[i]*m,null));
     }
     private void render(){
         String query=search==null?"":search.getText().toString();root.removeAllViews();header();
@@ -64,7 +79,7 @@ public class MainActivity extends Activity {
         LinearLayout bar=row();bar.setGravity(Gravity.CENTER_VERTICAL);bar.setPadding(dp(18),dp(14),dp(18),dp(12));bar.setBackgroundColor(Color.WHITE);
         android.widget.ImageView logo=new android.widget.ImageView(this);logo.setImageResource(R.mipmap.ic_launcher);bar.addView(logo,new LinearLayout.LayoutParams(dp(38),dp(38)));
         LinearLayout title=column();title.setPadding(dp(9),0,0,0);title.addView(text("OneNotify",18,INK,true));title.addView(text(page.equals("รวมข้อความ")?"Inbox Feed":page.equals("disclosure")?"การขอสิทธิ์":page,11,MUTED,false));bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        bar.addView(text(hasAccess()?"● พร้อมใช้งาน":"● ยังไม่เชื่อมต่อ",11,hasAccess()?0xff229669:0xffc85846,true));root.addView(bar);
+        bar.addView(text(demo||hasAccess()?"● พร้อมใช้งาน":"● ยังไม่เชื่อมต่อ",11,demo||hasAccess()?0xff229669:0xffc85846,true));root.addView(bar);
     }
     private void inbox(String oldQuery){
         LinearLayout summary=column();summary.setPadding(dp(15),dp(12),dp(15),dp(12));summary.setBackground(round(0xffeef0ff,16));summary.addView(text("✦  ภาพรวมกล่องข้อความวันนี้",14,INK,true));summary.addView(text(notifications.size()+" การแจ้งเตือนที่ยังค้างอยู่ • อัปเดตจากเครื่องนี้",12,MUTED,false));content.addView(summary,mb(14));
@@ -75,19 +90,19 @@ public class MainActivity extends Activity {
     private void chip(String name,int count){boolean active=filter.equals(name);TextView v=text(name+"  "+count,12,active?Color.WHITE:INK,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(13),dp(9),dp(13),dp(9));v.setBackground(round(active?BLUE:Color.WHITE,20));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,-2);p.rightMargin=dp(7);chips.addView(v,p);v.setOnClickListener(w->{filter=name;renderChips();renderList();});}
     private void renderList(){
         if(content==null||!page.equals("รวมข้อความ"))return;while(content.getChildCount()>3)content.removeViewAt(3);
-        if(!hasAccess()){notice("เปิดสิทธิ์เพื่อดูข้อความ","OneNotify ต้องได้รับสิทธิ์อ่านการแจ้งเตือนบนเครื่องนี้",true);return;}
-        if(MessageListener.instance==null){notice("กำลังเชื่อมต่อ","รอสักครู่แล้วรายการจะอัปเดตอัตโนมัติ",false);return;}
-        String query=search==null?"":search.getText().toString().trim().toLowerCase(Locale.ROOT);List<StatusBarNotification> shown=new ArrayList<>();
-        for(StatusBarNotification item:notifications){Notification n=item.getNotification();String source=source(item.getPackageName());String title=String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TITLE,""));String body=String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TEXT,""));if((filter.equals("ทั้งหมด")||filter.equals(source))&&(query.isEmpty()||(title+" "+body+" "+source).toLowerCase(Locale.ROOT).contains(query)))shown.add(item);}
-        content.addView(text("ข้อความล่าสุด   "+shown.size()+" รายการ",16,INK,true),mb(8));if(shown.isEmpty()){notice("ไม่มีข้อความที่ตรงกับตัวกรอง","ลองเลือกแอปอื่นหรือเปลี่ยนคำค้นหา",false);return;}for(StatusBarNotification item:shown)messageCard(item);
+        if(!demo&&!hasAccess()){notice("เปิดสิทธิ์เพื่อดูข้อความ","OneNotify ต้องได้รับสิทธิ์อ่านการแจ้งเตือนบนเครื่องนี้",true);return;}
+        if(!demo&&MessageListener.instance==null){notice("กำลังเชื่อมต่อ","รอสักครู่แล้วรายการจะอัปเดตอัตโนมัติ",false);return;}
+        String query=search==null?"":search.getText().toString().trim().toLowerCase(Locale.ROOT);List<Item> shown=new ArrayList<>();
+        for(Item item:notifications){String source=source(item.pkg);if((filter.equals("ทั้งหมด")||filter.equals(source))&&(query.isEmpty()||(item.title+" "+item.body+" "+source).toLowerCase(Locale.ROOT).contains(query)))shown.add(item);}
+        content.addView(text("ข้อความล่าสุด   "+shown.size()+" รายการ",16,INK,true),mb(8));if(shown.isEmpty()){notice("ไม่มีข้อความที่ตรงกับตัวกรอง","ลองเลือกแอปอื่นหรือเปลี่ยนคำค้นหา",false);return;}for(Item item:shown)messageCard(item);
     }
-    private void messageCard(StatusBarNotification item){
-        Notification n=item.getNotification();String source=source(item.getPackageName());int accent=source.equals("LINE")?0xff15b866:source.equals("Messenger")?0xff2185f7:0xff25b373;
+    private void messageCard(Item item){
+        String source=source(item.pkg);int accent=source.equals("LINE")?0xff15b866:source.equals("Messenger")?0xff2185f7:0xff25b373;
         LinearLayout card=column();card.setPadding(dp(14),dp(12),dp(14),dp(12));card.setBackground(round(Color.WHITE,16));content.addView(card,mb(9));
         LinearLayout top=row();top.setGravity(Gravity.CENTER_VERTICAL);TextView avatar=text(source.substring(0,1),16,Color.WHITE,true);avatar.setGravity(Gravity.CENTER);avatar.setBackground(round(accent,16));top.addView(avatar,new LinearLayout.LayoutParams(dp(36),dp(36)));
-        LinearLayout who=column();who.setPadding(dp(10),0,0,0);who.addView(text(String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TITLE,"")),15,INK,true));who.addView(text(source+"  •  "+DateFormat.getTimeInstance(DateFormat.SHORT).format(item.getPostTime()),11,accent,false));top.addView(who,new LinearLayout.LayoutParams(0,-2,1));card.addView(top);
-        CharSequence body=n.extras.getCharSequence(Notification.EXTRA_TEXT,"");if(!TextUtils.isEmpty(body)){TextView message=text(body.toString(),13,0xff4b5569,false);message.setPadding(dp(46),dp(8),0,dp(5));message.setMaxLines(3);message.setEllipsize(TextUtils.TruncateAt.END);card.addView(message);}
-        TextView action=text("เปิดใน "+source+"   →",12,BLUE,true);action.setGravity(Gravity.RIGHT);card.addView(action);card.setOnClickListener(v->openOriginal(n.contentIntent));card.setClickable(true);card.setFocusable(true);
+        LinearLayout who=column();who.setPadding(dp(10),0,0,0);who.addView(text(item.title,15,INK,true));who.addView(text(source+"  •  "+DateFormat.getTimeInstance(DateFormat.SHORT).format(item.time),11,accent,false));top.addView(who,new LinearLayout.LayoutParams(0,-2,1));card.addView(top);
+        String body=item.body;if(!TextUtils.isEmpty(body)){TextView message=text(body,13,0xff4b5569,false);message.setPadding(dp(46),dp(8),0,dp(5));message.setMaxLines(3);message.setEllipsize(TextUtils.TruncateAt.END);card.addView(message);}
+        TextView action=text("เปิดใน "+source+"   →",12,BLUE,true);action.setGravity(Gravity.RIGHT);card.addView(action);card.setOnClickListener(v->openOriginal(item.intent));card.setClickable(true);card.setFocusable(true);
     }
     private void quickChats(){content.addView(text("แชทด่วน",23,INK,true),mb(8));notice("เปิดบทสนทนาจากกล่องข้อความ","เลือกการแจ้งเตือนในหน้า รวมข้อความ เพื่อเปิดแชตในแอปต้นทาง",false);action("ไปยังรวมข้อความ",()->{page="รวมข้อความ";render();});}
     private void appsPage(){content.addView(text("แอปที่เชื่อมต่อ",23,INK,true),mb(8));for(int i=0;i<PACKAGES.length;i++){String name=i==0?"LINE":i==1?"Messenger":i==2?"WhatsApp":"WhatsApp Business";boolean installed;try{getPackageManager().getPackageInfo(PACKAGES[i],0);installed=true;}catch(Exception e){installed=false;}LinearLayout card=column();card.setPadding(dp(15),dp(13),dp(15),dp(13));card.setBackground(round(Color.WHITE,15));card.addView(text(name,16,INK,true));card.addView(text(installed?"ติดตั้งบนเครื่องแล้ว":"ไม่พบแอปบนเครื่อง",12,installed?0xff229669:MUTED,false));content.addView(card,mb(9));}content.addView(text("รายการจะแสดงเมื่อมีการแจ้งเตือนและเปิดสิทธิ์ Notification access",12,MUTED,false));}
@@ -110,7 +125,7 @@ public class MainActivity extends Activity {
     }
     private void disclosureItem(String head,String detail){LinearLayout box=column();box.setPadding(dp(16),dp(13),dp(16),dp(13));box.setBackground(round(Color.WHITE,14));box.addView(text(head,14,INK,true));box.addView(text(detail,13,MUTED,false));content.addView(box,mb(8));}
     private boolean hasAccess(){String enabled=Settings.Secure.getString(getContentResolver(),"enabled_notification_listeners");return enabled!=null&&enabled.contains(new ComponentName(this,MessageListener.class).flattenToString());}
-    private int count(String source){int count=0;for(StatusBarNotification item:notifications)if(source(item.getPackageName()).equals(source))count++;return count;}
+    private int count(String source){int count=0;for(Item item:notifications)if(source(item.pkg).equals(source))count++;return count;}
     private String source(String pkg){if(pkg.equals(PACKAGES[0]))return "LINE";if(pkg.equals(PACKAGES[1]))return "Messenger";if(pkg.equals(PACKAGES[3]))return "WA Business";return "WhatsApp";}
     private void openOriginal(PendingIntent intent){if(intent==null){Toast.makeText(this,"การแจ้งเตือนนี้ไม่มีลิงก์เปิดแชต",Toast.LENGTH_SHORT).show();return;}try{if(android.os.Build.VERSION.SDK_INT>=34){android.app.ActivityOptions o=android.app.ActivityOptions.makeBasic();o.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);intent.send(this,0,null,null,null,null,o.toBundle());}else intent.send();}catch(PendingIntent.CanceledException e){Toast.makeText(this,"การแจ้งเตือนนี้หมดอายุแล้ว",Toast.LENGTH_SHORT).show();reload();}}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
