@@ -58,12 +58,12 @@ public class MainActivity extends Activity {
     private void render(){
         String query=search==null?"":search.getText().toString();root.removeAllViews();header();
         ScrollView scroll=new ScrollView(this);content=column();content.setPadding(dp(18),dp(14),dp(18),dp(18));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(page.equals("รวมข้อความ"))inbox(query);else if(page.equals("แชทด่วน"))quickChats();else if(page.equals("แอปที่เชื่อมต่อ"))appsPage();else settingsPage();bottomNav();
+        if(page.equals("รวมข้อความ"))inbox(query);else if(page.equals("แชทด่วน"))quickChats();else if(page.equals("แอปที่เชื่อมต่อ"))appsPage();else if(page.equals("disclosure"))disclosurePage();else settingsPage();bottomNav();
     }
     private void header(){
         LinearLayout bar=row();bar.setGravity(Gravity.CENTER_VERTICAL);bar.setPadding(dp(18),dp(14),dp(18),dp(12));bar.setBackgroundColor(Color.WHITE);
-        TextView logo=text("▣",23,Color.WHITE,true);logo.setGravity(Gravity.CENTER);logo.setBackground(round(BLUE,12));bar.addView(logo,new LinearLayout.LayoutParams(dp(38),dp(38)));
-        LinearLayout title=column();title.setPadding(dp(9),0,0,0);title.addView(text("OneNotify",18,INK,true));title.addView(text(page.equals("รวมข้อความ")?"Inbox Feed":page,11,MUTED,false));bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        android.widget.ImageView logo=new android.widget.ImageView(this);logo.setImageResource(R.mipmap.ic_launcher);bar.addView(logo,new LinearLayout.LayoutParams(dp(38),dp(38)));
+        LinearLayout title=column();title.setPadding(dp(9),0,0,0);title.addView(text("OneNotify",18,INK,true));title.addView(text(page.equals("รวมข้อความ")?"Inbox Feed":page.equals("disclosure")?"การขอสิทธิ์":page,11,MUTED,false));bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         bar.addView(text(hasAccess()?"● พร้อมใช้งาน":"● ยังไม่เชื่อมต่อ",11,hasAccess()?0xff229669:0xffc85846,true));root.addView(bar);
     }
     private void inbox(String oldQuery){
@@ -91,10 +91,24 @@ public class MainActivity extends Activity {
     }
     private void quickChats(){content.addView(text("แชทด่วน",23,INK,true),mb(8));notice("เปิดบทสนทนาจากกล่องข้อความ","เลือกการแจ้งเตือนในหน้า รวมข้อความ เพื่อเปิดแชตในแอปต้นทาง",false);action("ไปยังรวมข้อความ",()->{page="รวมข้อความ";render();});}
     private void appsPage(){content.addView(text("แอปที่เชื่อมต่อ",23,INK,true),mb(8));for(int i=0;i<PACKAGES.length;i++){String name=i==0?"LINE":i==1?"Messenger":i==2?"WhatsApp":"WhatsApp Business";boolean installed;try{getPackageManager().getPackageInfo(PACKAGES[i],0);installed=true;}catch(Exception e){installed=false;}LinearLayout card=column();card.setPadding(dp(15),dp(13),dp(15),dp(13));card.setBackground(round(Color.WHITE,15));card.addView(text(name,16,INK,true));card.addView(text(installed?"ติดตั้งบนเครื่องแล้ว":"ไม่พบแอปบนเครื่อง",12,installed?0xff229669:MUTED,false));content.addView(card,mb(9));}content.addView(text("รายการจะแสดงเมื่อมีการแจ้งเตือนและเปิดสิทธิ์ Notification access",12,MUTED,false));}
-    private void settingsPage(){content.addView(text("ตั้งค่า",23,INK,true),mb(8));notice("สิทธิ์การแจ้งเตือน",hasAccess()?"เปิดใช้งานแล้ว":"ยังไม่ได้เปิดใช้งาน",false);action("เปิดการตั้งค่าสิทธิ์",()->startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));content.addView(text("OneNotify แสดงเฉพาะการแจ้งเตือนที่ยังค้างอยู่ ไม่เก็บข้อความหรือส่งข้อมูลออกจากเครื่อง",13,MUTED,false));}
-    private void notice(String title,String detail,boolean enable){LinearLayout box=column();box.setPadding(dp(16),dp(17),dp(16),dp(17));box.setBackground(round(Color.WHITE,16));box.addView(text(title,16,INK,true));box.addView(text(detail,13,MUTED,false));content.addView(box,mb(12));if(enable)action("เปิดสิทธิ์อ่านการแจ้งเตือน",()->startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));}
+    private void settingsPage(){content.addView(text("ตั้งค่า",23,INK,true),mb(8));notice("สิทธิ์การแจ้งเตือน",hasAccess()?"เปิดใช้งานแล้ว":"ยังไม่ได้เปิดใช้งาน",false);action("เปิดการตั้งค่าสิทธิ์",()->showDisclosure());content.addView(text("OneNotify แสดงเฉพาะการแจ้งเตือนที่ยังค้างอยู่ ไม่เก็บข้อความหรือส่งข้อมูลออกจากเครื่อง",13,MUTED,false));}
+    private void notice(String title,String detail,boolean enable){LinearLayout box=column();box.setPadding(dp(16),dp(17),dp(16),dp(17));box.setBackground(round(Color.WHITE,16));box.addView(text(title,16,INK,true));box.addView(text(detail,13,MUTED,false));content.addView(box,mb(12));if(enable)action("เปิดสิทธิ์อ่านการแจ้งเตือน",()->showDisclosure());}
     private void action(String title,Runnable task){TextView v=text(title,14,Color.WHITE,true);v.setGravity(Gravity.CENTER);v.setBackground(round(BLUE,13));content.addView(v,new LinearLayout.LayoutParams(-1,dp(46)));v.setOnClickListener(w->task.run());}
     private void bottomNav(){LinearLayout nav=row();nav.setBackgroundColor(Color.WHITE);nav.setPadding(dp(7),dp(7),dp(7),dp(7));String[] pages={"รวมข้อความ","แชทด่วน","แอปที่เชื่อมต่อ","ตั้งค่า"};String[] icons={"▣","▢","▦","⚙"};for(int i=0;i<pages.length;i++){String target=pages[i];LinearLayout item=column();item.setGravity(Gravity.CENTER);item.addView(text(icons[i],21,page.equals(target)?BLUE:MUTED,true));item.addView(text(target,10,page.equals(target)?BLUE:MUTED,page.equals(target)));nav.addView(item,new LinearLayout.LayoutParams(0,dp(53),1));item.setOnClickListener(v->{page=target;search=null;render();});}root.addView(nav);}
+    private void showDisclosure(){page="disclosure";render();}
+    private void disclosurePage(){
+        android.widget.ImageView pet=new android.widget.ImageView(this);pet.setImageResource(R.mipmap.ic_launcher);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(dp(96),dp(96));pp.gravity=Gravity.CENTER_HORIZONTAL;pp.topMargin=dp(6);pp.bottomMargin=dp(14);content.addView(pet,pp);
+        TextView title=text("ก่อนเปิดสิทธิ์อ่านการแจ้งเตือน",21,INK,true);title.setGravity(Gravity.CENTER);content.addView(title,mb(6));
+        TextView lead=text("OneNotify ต้องใช้สิทธิ์ \"การเข้าถึงการแจ้งเตือน\" ของ Android เพื่อรวมข้อความจากหลายแอปไว้ในที่เดียว โปรดอ่านก่อนอนุญาต",13,MUTED,false);lead.setGravity(Gravity.CENTER);content.addView(lead,mb(16));
+        disclosureItem("ข้อมูลที่อ่าน","ชื่อผู้ส่ง ข้อความ และเวลาที่ปรากฏในการแจ้งเตือนที่ยังค้างอยู่บนเครื่อง");
+        disclosureItem("แอปที่แสดง","LINE, Messenger, WhatsApp และ WhatsApp Business เท่านั้น");
+        disclosureItem("สิ่งที่ควรรู้","Android จะให้สิทธิ์อ่านการแจ้งเตือนจากทุกแอปในเครื่อง แต่ OneNotify จะไม่แสดงหรือใช้การแจ้งเตือนจากแอปอื่น");
+        disclosureItem("ความเป็นส่วนตัว","ข้อมูลอยู่บนเครื่องนี้เท่านั้น ไม่บันทึกลงฐานข้อมูล ไม่ส่งขึ้นเซิร์ฟเวอร์ และไม่แชร์กับใคร");
+        disclosureItem("ถอนสิทธิ์ได้ทุกเมื่อ","ไปที่ ตั้งค่า > การแจ้งเตือน > การเข้าถึงการแจ้งเตือน แล้วปิด OneNotify");
+        action("ยอมรับและไปที่การตั้งค่า",()->{page="รวมข้อความ";startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));});
+        TextView later=text("ไว้ทีหลัง",14,BLUE,true);later.setGravity(Gravity.CENTER);later.setPadding(0,dp(14),0,dp(14));later.setOnClickListener(v->{page="รวมข้อความ";render();});content.addView(later,new LinearLayout.LayoutParams(-1,-2));
+    }
+    private void disclosureItem(String head,String detail){LinearLayout box=column();box.setPadding(dp(16),dp(13),dp(16),dp(13));box.setBackground(round(Color.WHITE,14));box.addView(text(head,14,INK,true));box.addView(text(detail,13,MUTED,false));content.addView(box,mb(8));}
     private boolean hasAccess(){String enabled=Settings.Secure.getString(getContentResolver(),"enabled_notification_listeners");return enabled!=null&&enabled.contains(new ComponentName(this,MessageListener.class).flattenToString());}
     private int count(String source){int count=0;for(StatusBarNotification item:notifications)if(source(item.getPackageName()).equals(source))count++;return count;}
     private String source(String pkg){if(pkg.equals(PACKAGES[0]))return "LINE";if(pkg.equals(PACKAGES[1]))return "Messenger";if(pkg.equals(PACKAGES[3]))return "WA Business";return "WhatsApp";}
